@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "express": "^4.19.2",
+    "inquirer": "^8.2.4",
+    "mysql2": "^3.9.7",
+    "wait": "^0.4.2",
+    "sequelize": "^6.3.5"
+  }
+}
