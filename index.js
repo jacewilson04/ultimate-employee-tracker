@@ -180,10 +180,177 @@ async function update_employee_role() {
                 name: 'role_id',
             }
         ]).then((response) => {
-            console.log("Attempting to update employee");
+            console.log("Attempting to update employee role");
             
             // Sets the employees role
             db.query('UPDATE employee SET role_id = ? WHERE id = ?', [response.role_id, response.employee_id], function(err, results) {
+                resolve([err]);
+            });
+        });
+    });
+
+    return promise
+}
+
+// Changes employee role
+async function update_employee_manager() {
+    let promise = new Promise((resolve, reject) => {
+        inquirer.prompt([
+            {
+                type: 'input',
+                message: 'Employee Id',
+                name: 'employee_id',
+            },
+            {
+                type: 'input',
+                message: 'New Manager Employee Id',
+                name: 'manager_id',
+            }
+        ]).then((response) => {
+            console.log("Attempting to update employee manager");
+            
+            // Sets the employees role
+            db.query('UPDATE employee SET manager_id = ? WHERE id = ?', [response.manager_id, response.employee_id], function(err, results) {
+                resolve([err]);
+            });
+        });
+    });
+
+    return promise
+}
+
+// Displays all the employees under a certain manager
+async function view_employee_by_manager() {
+    let promise = new Promise((resolve, reject) => {
+        inquirer.prompt([
+            {
+                type: 'input',
+                message: 'Manager Employee Id',
+                name: 'manager_id',
+            }
+        ]).then((response) => {
+            console.log("Attempting to update employee manager");
+            
+            // Sets the employees role
+            db.query('SELECT * FROM employee WHERE manager_id = ?', [response.manager_id], function(err, results) {
+                resolve([err, results]);
+            });
+        });
+    });
+
+    return promise
+}
+
+// Displays all the employees in a certain department
+async function view_employee_by_department() {
+    let promise = new Promise((resolve, reject) => {
+
+        // Queries the departments first so we can add them to inquirer
+        db.query('SELECT * FROM department', function (err, departments) {
+            // Formats data so inquirer can use it and we can read it afterwards
+
+            let departmentChoice = [];
+            let departmentNameToId = {};
+
+            for (let i = 0; i < departments.length; i++) {
+                let department = departments[i]
+
+                departmentChoice.push(department.name)
+                departmentNameToId[department.name] = department.id
+            }
+
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    message: 'Department',
+                    name: 'department',
+                    choices: departmentChoice,
+                }
+            ]).then((response) => {
+
+                console.log("Displaying employees from the " + response.department + " department!")
+
+                // Gets the department id based on it's name
+                const department_id = departmentNameToId[response.department];
+    
+                // Inserts new role data
+                db.query('SELECT * FROM employee WHERE role_id in (SELECT id FROM role WHERE department_id = ?)', [department_id], function(err, results) {
+                    resolve([err, results])
+                });
+            });
+        })
+    });
+
+    return promise
+}
+
+// Calculate total budget of company based on employee salaries
+async function view_budget() {
+    let promise = new Promise((resolve, reject) => {
+
+        // Queries the departments first so we can add them to inquirer
+        db.query('SELECT * FROM department', function (err, departments) {
+            let departmentChoice = [];
+            let departmentNameToId = {};
+
+            for (let i = 0; i < departments.length; i++) {
+                let department = departments[i];
+
+                departmentChoice.push(department.name);
+                departmentNameToId[department.name] = department.id;
+            }
+
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    message: 'Department',
+                    name: 'department',
+                    choices: departmentChoice,
+                }
+            ]).then((response) => {
+                // Gets the department id based on it's name
+                const department_id = departmentNameToId[response.department];
+
+                // Grab all of the employees roles
+                // Query the salary of every single employee based on their roles
+                db.query('SELECT salary FROM role WHERE department_id = ? AND id in (SELECT role_id FROM employee)', [department_id],function(err, results) {
+                    let budget = results.reduce(function (accumulator, currentValue, index, array) {
+                        return accumulator + Number(currentValue.salary)
+                    }, 0);
+
+                    resolve([err, "Current Spendings: $" + budget]);
+                });
+            });
+        });
+    });
+
+    return promise
+}
+
+async function remove() {
+    let promise = new Promise((resolve, reject) => {
+        inquirer.prompt([
+            {
+                type: 'list',
+                message: 'Type of object to delete',
+                name: 'type',
+                choices: [
+                    "department",
+                    "role",
+                    "employee",
+                ],
+            },
+            {
+                type: 'input',
+                message: 'ID of object to delete',
+                name: 'id',
+            }
+        ]).then((response) => {
+            console.log("Attempting to delete object " + response.type + " with id of " + response.id +"!");
+            
+            // Deletes the object based on the id
+            // Unfortunately mysql does not allow you use ? in the table name spot so this will have suffice
+            db.query(`DELETE FROM ${response.type} WHERE id = ?`, [response.id], function(err, results) {
                 resolve([err]);
             });
         });
@@ -207,7 +374,12 @@ async function main() {
             "add a department",
             "add a role",
             "add an employee",
-            "update an employee role"
+            "update an employee role",
+            "update an employee manager",
+            "view employees by department",
+            "view employees by manager",
+            "view budget",
+            "remove",
         ],
     }])
 
@@ -236,6 +408,21 @@ async function main() {
     case "update an employee role":
         action = update_employee_role;
         break;
+    case "update an employee manager":
+        action = update_employee_manager;
+        break;
+    case "view employees by department":
+        action = view_employee_by_department;
+        break;
+    case "view employees by manager":
+        action = view_employee_by_manager;
+        break;
+    case "view budget":
+        action = view_budget;
+        break;
+    case "remove":
+        action = remove;
+        break;
     }
 
     // wait for the action to finish itself
@@ -250,15 +437,19 @@ async function main() {
     if (!err) {
         console.log("Success!")
 
-        await wait(1000)
+        await wait(800)
 
         if (results) {
-            console.log(results)
+            if (typeof results === 'object') {
+                console.table(results)
+            } else {
+                console.log(results)
+            }
         }
     } else {
         console.log("Failure!")
 
-        await wait(1000)
+        await wait(800)
 
         console.log(err)
     }
